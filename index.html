@@ -1,13 +1,11 @@
 <!DOCTYPE html>
 <html lang="fi">
-    
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HSL Bussiseuranta</title>
 
-    <link rel="stylesheet"
-          href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 
     <style>
         html, body {
@@ -37,7 +35,7 @@
 
 <div class="info">
     <strong>HSL Bussiseuranta</strong><br>
-    Päivittyy 10 sekunnin välein
+    Päivittyy 5 sekunnin välein
 </div>
 
 <div id="map"></div>
@@ -45,57 +43,73 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
-const map = L.map('map').setView([60.1699, 24.9384], 11);
+// Alustetaan kartta Helsingin kohdalle
+const map = L.map('map').setView([60.1699, 24.9384], 12);
 
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap'
 }).addTo(map);
 
-
-    
-
+// Tallennetaan kartalla olevat merkit, jotta niitä voidaan liikuttaa eikä luoda aina uusia
 const vehicleMarkers = {};
 
+// MUISTA LAITTAA TÄHÄN OMA DIGITRANSIT-API-AVAIN
+const API_KEY = "REMPPAA_TÄHÄN_OMA_API_AVAIN"; 
+
 async function loadVehicles() {
-    const response = await fetch(
-        "https://api.digitransit.fi/routing/v2/routers/hsl/index/graphql",
-        {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "digitransit-subscription-key": "077ec890e32c460eb1ba91e210a9901f"
-            },
-            body: JSON.stringify({
-                query: `
-                {
-                  vehicles {
-                    id
-                    lat
-                    lon
-                    trip {
-                      routeShortName
-                    }
-                  }
+    // Jos API-avainta ei ole vaihdettu, varoitetaan konsolissa
+    if (API_KEY === "REMPPAA_TÄHÄN_OMA_API_AVAIN") {
+        console.error("Muista syöttää oma Digitransit-API-avain muuttujaan 'API_KEY'!");
+        return;
+    }
+
+    try {
+        // Käytetään Siri VM HTTP-rajapintaa GraphQL:n sijaan
+        const response = await fetch(
+            "https://api.digitransit.fi/realtime/v1/utils/vessel-positions",
+            {
+                method: "GET",
+                headers: {
+                    "digitransit-subscription-key": API_KEY
                 }
-                `
-            })
-        }
-    );
+            }
+        );
 
-    const data = await response.json();
-    const vehicles = data.data.vehicles;
-
-    vehicles.forEach(v => {
-        if (!vehicleMarkers[v.id]) {
-            vehicleMarkers[v.id] = L.marker([v.lat, v.lon]).addTo(map);
-        } else {
-            vehicleMarkers[v.id].setLatLng([v.lat, v.lon]);
+        if (!response.ok) {
+            throw new Error(`HTTP virhe! Status: ${response.status}`);
         }
 
-        vehicleMarkers[v.id].bindPopup("Linja " + (v.trip?.routeShortName || "?"));
-    });
+        const data = await response.json();
+        
+        // HSL:n data löytyy polusta: data.vesselPositions
+        const vehicles = data.vesselPositions || [];
+
+        vehicles.forEach(v => {
+            // Rajataan varmuuden vuoksi vain bussit/ratikat jne. joilla on koordinaatit
+            if (!v.lat || !v.lng || !v.id) return;
+
+            const lat = v.lat;
+            const lon = v.lng;
+            const lineName = v.signerRoute || v.routeId || "?";
+
+            if (!vehicleMarkers[v.id]) {
+                // Luodaan uusi markeri jos sitä ei ole vielä olemassa
+                vehicleMarkers[v.id] = L.marker([lat, lon]).addTo(map);
+            } else {
+                // Päivitetään olemassa olevan markerin sijainti suoraan (bussi "liikkuu")
+                vehicleMarkers[v.id].setLatLng([lat, lon]);
+            }
+
+            // Päivitetään ponnahdusikkunan teksti (esim. "Linja 550")
+            vehicleMarkers[v.id].bindPopup(`<b>Linja:</b> ${lineName}`);
+        });
+
+    } catch (error) {
+        console.error("Virhe haettaessa busseja:", error);
+    }
 }
 
+// Haetaan heti alussa ja sen jälkeen 5 sekunnin välein
 loadVehicles();
 setInterval(loadVehicles, 5000);
 </script>
