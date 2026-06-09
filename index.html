@@ -57,11 +57,7 @@ const vehicleMarkers = {};
 const API_KEY = "077ec890e32c460eb1ba91e210a9901f"; 
 
 async function loadVehicles() {
-    // Jos API-avainta ei ole vaihdettu, varoitetaan konsolissa
-    if (API_KEY === "REMPPAA_TÄHÄN_OMA_API_AVAIN") {
-        console.error("Muista syöttää oma Digitransit-API-avain muuttujaan 'API_KEY'!");
-        return;
-    }
+
 
     try {
         // Käytetään Siri VM HTTP-rajapintaa GraphQL:n sijaan
